@@ -1,0 +1,6 @@
+[managed_hosts]
+servera.lab.local
+serverb.lab.local
+
+[control_node]
+control.lab.local

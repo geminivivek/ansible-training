@@ -1,0 +1,115 @@
+---
+##############################################################################################################
+- name: This Playbook create user on control node
+  
+  hosts: localhost
+
+  tasks:
+
+##############################################################################################################
+    
+    - name: create ansible automation user on control node
+      user:
+          name: "{{ automation_user }}"
+          comment: automation user
+          generate_ssh_key: true
+          password: "{{ automation_user_pass | password_hash('sha512') }}"
+          state: present
+          update_password: on_create
+
+##############################################################################################################
+##############################################################################################################
+##############################################################################################################
+
+- name: This playbook setup the new node for ansible automation , deployed required packages and create users 
+
+  hosts: managed_hosts:control_node
+  
+  tasks:
+
+##############################################################################################################
+    
+    - name: Install python on the managed node
+      raw: yum -y install {{ python_package }}
+
+      register: result_var
+
+      when:  ( ansible_facts['distribution'] == "RedHat" or ansible_facts['distribution'] == "CentOS" ) and
+             ( ansible_facts['distribution_major_version'] < "8" )
+
+      changed_when: "'will be installed' in result_var.stdout"
+
+#    - debug: var=result_var 
+#    - debug: var=ansible_facts['selinux']['mode']
+
+##############################################################################################################
+    
+    - name: Install addtional libselinux package if Selinux is enabled on the managed node
+      raw: yum -y install {{ python_selinux }}
+
+      register: result_var
+
+      when: ansible_facts['selinux']['mode'] !="enabled"
+
+      changed_when: "'will be installed' in result_var.stdout"
+
+#    - debug: var=result_var
+
+##############################################################################################################
+
+    - name: Create Ansible and Devops user on Managed Nodes
+      user:
+          name: "{{ item }}"
+          comment: automation user
+          password: "{{ automation_user_pass | password_hash ('sha512') }}"
+          state: present
+          update_password: on_create
+      loop: "{{ automation_users }}"
+
+##############################################################################################################
+    - name: Password less login for ansible user on Managed hosts
+      authorized_key:
+          user: "{{ item }}"
+          state: present
+          key: "{{ lookup('file', '/home/ansible/.ssh/id_rsa.pub') }}"
+      loop: "{{ automation_users }}"
+
+##############################################################################################################
+    - name: Configure Sudo without password on Managed hosts
+      lineinfile:
+          path: /etc/sudoers.d/automation
+          regexp: "^{{ item }}"
+          line: "{{ item }} ALL=(ALL) NOPASSWD:ALL"
+          state: present
+          create: true
+      loop: "{{ automation_users }}"
+
+- name: This play add custom facts in the managed hosts
+  hosts: managed_hosts
+  tasks:
+##############################################################################################################
+    - name: Create custom fact directory
+      file:
+          path: "{{ custom_facts_dir }}"
+          state: directory
+
+##############################################################################################################
+    - name: Create custom facts
+      blockinfile:
+          path: /etc/ansible/facts.d/custom.fact
+          create: true
+          state: present
+          block: |
+              [defaults]
+              role = Managed_Node
+              app = webserver
+      changed_when: true
+      notify: debug_handler
+    - debug: var=ansible_facts['ansible_local']['custom']['defaults']['role']      
+    - debug: var=ansible_facts['ansible_local']['custom']['defaults']['app']
+  
+
+  handlers:
+    - name: debug_handler
+      debug:
+          msg: "Hello from Handler"

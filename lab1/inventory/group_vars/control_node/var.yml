@@ -1,0 +1,6 @@
+python_package: python36
+python_selinux: python3-libselinux
+auto_user: ansible
+automation_users:
+  - ansible
+  - devops
